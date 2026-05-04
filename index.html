@@ -5,11 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>名牌產生器 Web 版</title>
     
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400&display=swap" rel="stylesheet">
+    
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f7fa; color: #333; }
+        body { font-family: 'Noto Sans TC', sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f7fa; color: #333; }
         .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
         h1 { text-align: center; color: #0B3D91; }
         h3 { border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 0; color: #0B3D91; }
@@ -33,7 +37,8 @@
 <body>
 
     <h1>🪪 雙語名牌產生器</h1>
-    <div id="status"></div> <div class="card">
+
+    <div class="card">
         <h3>⚙️ 名牌樣式設定</h3>
         <div class="grid">
             <div>
@@ -45,7 +50,7 @@
             </div>
             <div>
                 <label class="checkbox-label">
-                    <input type="checkbox" id="foreignFirst" onchange="updatePreview()"> <b>外文姓名在上</b> (預設為中文在上)
+                    <input type="checkbox" id="foreignFirst" onchange="updatePreview()"> <b>外文姓名在上</b>
                 </label>
             </div>
             <div><label>字體大小 (px)</label><input type="number" id="fontPx" oninput="updatePreview()"></div>
@@ -73,9 +78,9 @@
 
     <div class="card">
         <h3>📂 批次產生 (Excel上傳)</h3>
-        <p style="font-size: 0.9em; color: #555; margin-top: 0;">請確保 Excel 內有 <b>「中文姓名」</b> 或 <b>「Chn.」</b> 欄位，以及 <b>「外文姓名」</b> 或 <b>「Kor.」</b> 欄位。系統會自動為每一列產生一張名牌。</p>
         <input type="file" id="excelFile" accept=".xlsx, .xls" style="margin-bottom: 10px;">
         <button id="generateBtn" onclick="generateBatchBadges()">🚀 批次產生並下載 ZIP</button>
+        <div id="status"></div>
     </div>
 
 <script>
@@ -108,55 +113,21 @@
         updatePreview();
     }
 
-    // 載入自訂字體 (精確讀取同目錄下的 NotoSansCJKtc-Regular.ttf)
-    let fontLoaded = false;
-    async function loadFont() {
-        if(fontLoaded) return true;
-        try {
-            document.getElementById('status').innerText = "⏳ 正在從伺服器下載 NotoSansCJKtc-Regular.ttf 字體... (由於檔案較大，請稍候約 3~5 秒)";
-            document.getElementById('status').style.color = "#0B3D91";
-            
-            // 使用相對路徑 ./ 確保在 GitHub Pages 上能正確抓到檔案
-            const font = new FontFace('CustomFont', 'url(./NotoSansCJKtc-Regular.ttf)');
-            await font.load();
-            document.fonts.add(font);
-            fontLoaded = true;
-            
-            document.getElementById('status').innerText = "✅ 字體載入成功！";
-            document.getElementById('status').style.color = "#4CAF50";
-            
-            // 載入成功後，重新繪製預覽圖
-            updatePreview();
-            
-            // 3秒後隱藏提示訊息
-            setTimeout(() => { document.getElementById('status').innerText = ""; }, 3000);
-            return true;
-        } catch (e) {
-            console.error("字體載入失敗:", e);
-            document.getElementById('status').innerText = "❌ 字體載入失敗！請確認 NotoSansCJKtc-Regular.ttf 有上傳至 GitHub 且大小寫完全一致。";
-            document.getElementById('status').style.color = "#d9534f";
-            return false;
-        }
-    }
-
-    // 核心繪圖邏輯：使用 CustomFont 且【不加粗】
     function renderBadgeOnCanvas(canvas, en, zh, cfg) {
         canvas.width = cfg.height;
         canvas.height = cfg.width;
         
         const ctx = canvas.getContext('2d');
-        
         ctx.translate(0, cfg.width);
         ctx.rotate(-Math.PI / 2);
 
         ctx.fillStyle = cfg.bg;
         ctx.fillRect(0, 0, cfg.width, cfg.height);
 
-        // 使用 CustomFont，且拿掉粗體設定，還原最真實的 Regular 筆觸
+        // 使用標準思源黑體 (不含 bold)
         ctx.fillStyle = cfg.fg;
         ctx.textAlign = 'center';
-        const fontName = fontLoaded ? '"CustomFont", sans-serif' : 'sans-serif';
-        ctx.font = `${cfg.fontPx}px ${fontName}`;
+        ctx.font = `${cfg.fontPx}px 'Noto Sans TC', sans-serif`;
 
         const centerX = cfg.width / 2;
         const centerY = cfg.height / 2;
@@ -182,7 +153,6 @@
         const cfg = getConfig();
         const en = document.getElementById("s_en").value.trim();
         const zh = document.getElementById("s_zh").value.trim();
-        
         renderBadgeOnCanvas(canvas, en, zh, cfg);
     }
 
@@ -190,87 +160,60 @@
         const canvas = document.getElementById("previewCanvas");
         const en = document.getElementById("s_en").value.trim();
         const zh = document.getElementById("s_zh").value.trim();
-        const fileName = `${zh || en || '未命名'}_名牌.png`;
-
-        canvas.toBlob(blob => {
-            saveAs(blob, fileName);
-        }, "image/png");
+        const fileName = `${zh || en || '名牌'}.png`;
+        canvas.toBlob(blob => saveAs(blob, fileName), "image/png");
     }
 
     async function generateBatchBadges() {
         const fileInput = document.getElementById('excelFile');
-        if (!fileInput.files.length) {
-            alert("請先上傳 Excel 檔案！");
-            return;
-        }
+        if (!fileInput.files.length) { alert("請先上傳 Excel！"); return; }
 
         document.getElementById('status').innerText = "處理資料中...";
         document.getElementById('generateBtn').disabled = true;
 
-        const file = fileInput.files[0];
         const reader = new FileReader();
-
         reader.onload = async function(e) {
             try {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, {type: 'array'});
-                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                let json = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
+                const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {defval: ""});
 
                 const cfg = getConfig();
                 const zip = new JSZip();
                 const promises = [];
                 let validCount = 0;
 
-                json.forEach((row, index) => {
-                    const en = (row['Kor.'] || row['Eng.'] || row['外文姓名'] || row['外文'] || "").toString().trim();
-                    const zh = (row['Chn.'] || row['中文姓名'] || row['中文'] || "").toString().trim();
-                    
-                    if (!en && !zh) return; 
+                json.forEach((row) => {
+                    const en = (row['Kor.'] || row['Eng.'] || row['外文姓名'] || "").toString().trim();
+                    const zh = (row['Chn.'] || row['中文姓名'] || "").toString().trim();
+                    if (!en && !zh) return;
                     
                     validCount++;
-                    const fileName = `${zh || en}_${validCount.toString().padStart(3, '0')}.png`;
-                    
                     const tempCanvas = document.createElement('canvas');
                     renderBadgeOnCanvas(tempCanvas, en, zh, cfg);
-                    
-                    promises.push(new Promise(resolve => {
-                        tempCanvas.toBlob(blob => {
-                            zip.file(fileName, blob);
-                            resolve();
-                        }, 'image/png');
-                    }));
+                    promises.push(new Promise(res => tempCanvas.toBlob(b => {
+                        zip.file(`${zh || en}_${validCount.toString().padStart(3, '0')}.png`, b);
+                        res();
+                    }, 'image/png')));
                 });
 
-                if(validCount === 0) {
-                    throw new Error("找不到有效的名字資料。請確保 Excel 標題列包含 'Chn.' / 'Kor.' 或 '中文姓名' / '外文姓名'");
-                }
-
-                document.getElementById('status').innerText = `正在產生 ${validCount} 張名牌...`;
                 await Promise.all(promises);
-
-                document.getElementById('status').innerText = "打包壓縮中...";
                 const content = await zip.generateAsync({type:"blob"});
                 saveAs(content, "badges.zip");
-
-                document.getElementById('status').innerText = `✅ 成功產生 ${validCount} 張！已觸發下載。`;
-                document.getElementById('status').style.color = "#4CAF50";
-
+                document.getElementById('status').innerText = "✅ 完成！";
             } catch (err) {
-                console.error(err);
-                document.getElementById('status').innerText = "發生錯誤：" + err.message;
+                document.getElementById('status').innerText = "錯誤：" + err.message;
             } finally {
                 document.getElementById('generateBtn').disabled = false;
             }
         };
-        reader.readAsArrayBuffer(file);
+        reader.readAsArrayBuffer(fileInput.files[0]);
     }
 
-    // 頁面載入時初始化
     window.onload = () => {
         applyPreset();
-        // 觸發自訂字體下載
-        loadFont();
+        // 確保字體下載完畢後才畫預覽圖
+        document.fonts.ready.then(() => updatePreview());
     };
 </script>
 </body>
