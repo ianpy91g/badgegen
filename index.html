@@ -22,6 +22,8 @@
         .btn-secondary { background: #4CAF50; }
         .btn-secondary:hover { background: #45a049; }
         #status { margin-top: 15px; text-align: center; font-weight: bold; color: #d9534f; }
+        .checkbox-label { display: flex; align-items: center; font-weight: normal; margin-top: 25px; cursor: pointer; }
+        .checkbox-label input { width: auto; margin-right: 10px; cursor: pointer; }
         
         /* 預覽區塊樣式 */
         .preview-container { background: #eef2f5; padding: 15px; border-radius: 8px; text-align: center; margin-top: 15px; }
@@ -42,20 +44,25 @@
                     <option value="A4黑白">A4黑白</option>
                 </select>
             </div>
+            <div>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="foreignFirst" onchange="updatePreview()"> <b>外文姓名在上</b> (預設為中文在上)
+                </label>
+            </div>
             <div><label>字體大小 (px)</label><input type="number" id="fontPx" oninput="updatePreview()"></div>
+            <div><label>兩行文字間距 (px)</label><input type="number" id="gapPx" oninput="updatePreview()"></div>
             <div><label>寬度 (W)</label><input type="number" id="imgW" oninput="updatePreview()"></div>
             <div><label>高度 (H)</label><input type="number" id="imgH" oninput="updatePreview()"></div>
             <div><label>背景顏色</label><input type="color" id="bgColor" oninput="updatePreview()"></div>
             <div><label>字體顏色</label><input type="color" id="fgColor" oninput="updatePreview()"></div>
-            <div><label>兩行文字間距 (px)</label><input type="number" id="gapPx" oninput="updatePreview()"></div>
         </div>
     </div>
 
     <div class="card">
         <h3>👤 單人名牌預覽</h3>
         <div class="grid">
-            <div><label>外文姓名 (第一列)</label><input type="text" id="s_en" placeholder="例如: 홍길동" value="홍길동" oninput="updatePreview()"></div>
-            <div><label>中文姓名 (第二列)</label><input type="text" id="s_zh" placeholder="例如: 洪吉童" value="洪吉童" oninput="updatePreview()"></div>
+            <div><label>中文姓名</label><input type="text" id="s_zh" placeholder="例如: 洪吉童" value="洪吉童" oninput="updatePreview()"></div>
+            <div><label>外文姓名</label><input type="text" id="s_en" placeholder="例如: 홍길동" value="홍길동" oninput="updatePreview()"></div>
         </div>
         
         <div class="preview-container">
@@ -86,7 +93,8 @@
             bg: document.getElementById("bgColor").value || "#0B3D91",
             fg: document.getElementById("fgColor").value || "#FFFFFF",
             fontPx: parseInt(document.getElementById("fontPx").value) || 250,
-            gapPx: parseInt(document.getElementById("gapPx").value) || 100
+            gapPx: parseInt(document.getElementById("gapPx").value) || 100,
+            foreignFirst: document.getElementById("foreignFirst").checked // 取得勾選狀態
         };
     }
 
@@ -119,7 +127,7 @@
         }
     }
 
-    // 核心繪圖邏輯：自動將兩列文字在畫布正中央置中
+    // 核心繪圖邏輯：自動將兩列文字在畫布正中央置中，並處理上下順序
     function renderBadgeOnCanvas(canvas, en, zh, cfg) {
         canvas.width = cfg.height;
         canvas.height = cfg.width;
@@ -144,12 +152,15 @@
         const centerY = cfg.height / 2;
 
         if (en && zh) {
-            // 如果中外文都有：上方放外文，下方放中文，並依據 gapPx 垂直拉開距離
+            // 根據勾選狀態決定誰在上面
+            const topText = cfg.foreignFirst ? en : zh;
+            const bottomText = cfg.foreignFirst ? zh : en;
+
             ctx.textBaseline = 'bottom';
-            ctx.fillText(en, centerX, centerY - (cfg.gapPx / 2));
+            ctx.fillText(topText, centerX, centerY - (cfg.gapPx / 2));
             
             ctx.textBaseline = 'top';
-            ctx.fillText(zh, centerX, centerY + (cfg.gapPx / 2));
+            ctx.fillText(bottomText, centerX, centerY + (cfg.gapPx / 2));
         } else if (en || zh) {
             // 如果只有其中一個名字：直接在畫面正中央垂直置中
             const text = en || zh;
@@ -204,14 +215,13 @@
                 let validCount = 0;
 
                 json.forEach((row, index) => {
-                    // 自動判斷常見的欄位名稱 (可依照你的 Excel 標題擴充)
+                    // 自動判斷常見的欄位名稱
                     const en = (row['Kor.'] || row['Eng.'] || row['外文姓名'] || row['外文'] || "").toString().trim();
                     const zh = (row['Chn.'] || row['中文姓名'] || row['中文'] || "").toString().trim();
                     
                     if (!en && !zh) return; // 跳過空行
                     
                     validCount++;
-                    // 自動命名檔名，避免重複覆蓋加上序號
                     const fileName = `${zh || en}_${validCount.toString().padStart(3, '0')}.png`;
                     
                     const tempCanvas = document.createElement('canvas');
