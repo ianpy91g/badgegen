@@ -7,7 +7,7 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC&family=Ma+Shan+Zheng&family=Noto+Sans+TC:wght@400&family=Noto+Serif+TC:wght@400&family=Zhi+Mang+Xing&display=swap" rel="stylesheet">
     
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -46,6 +46,16 @@
                 <select id="presetSelect" onchange="applyPreset()">
                     <option value="手機藍白">手機藍白</option>
                     <option value="A4黑白">A4黑白</option>
+                </select>
+            </div>
+            <div>
+                <label>選擇字體</label>
+                <select id="fontSelect" onchange="updatePreview()">
+                    <option value="'Noto Sans TC'">思源黑體 (標準)</option>
+                    <option value="'Noto Serif TC'">思源宋體 (典雅)</option>
+                    <option value="'LXGW WenKai TC'">霞鶩文楷 (雲端楷體)</option>
+                    <option value="'Ma Shan Zheng'">毛筆體 (藝術)</option>
+                    <option value="'Zhi Mang Xing'">行書體 (動感)</option>
                 </select>
             </div>
             <div>
@@ -97,7 +107,8 @@
             fg: document.getElementById("fgColor").value || "#FFFFFF",
             fontPx: parseInt(document.getElementById("fontPx").value) || 250,
             gapPx: parseInt(document.getElementById("gapPx").value) || 100,
-            foreignFirst: document.getElementById("foreignFirst").checked
+            foreignFirst: document.getElementById("foreignFirst").checked,
+            fontFamily: document.getElementById("fontSelect").value
         };
     }
 
@@ -124,10 +135,9 @@
         ctx.fillStyle = cfg.bg;
         ctx.fillRect(0, 0, cfg.width, cfg.height);
 
-        // 使用標準思源黑體 (不含 bold)
         ctx.fillStyle = cfg.fg;
         ctx.textAlign = 'center';
-        ctx.font = `${cfg.fontPx}px 'Noto Sans TC', sans-serif`;
+        ctx.font = `${cfg.fontPx}px ${cfg.fontFamily}, sans-serif`;
 
         const centerX = cfg.width / 2;
         const centerY = cfg.height / 2;
@@ -212,7 +222,6 @@
 
     window.onload = () => {
         applyPreset();
-        // 確保字體下載完畢後才畫預覽圖
         document.fonts.ready.then(() => updatePreview());
     };
 </script>
