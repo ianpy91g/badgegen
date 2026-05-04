@@ -4,11 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>名牌產生器 Web 版</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f7fa; color: #333; }
+        /* 全站預設字體改為 Noto Sans TC */
+        body { font-family: 'Noto Sans TC', sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f7fa; color: #333; }
         .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
         h1 { text-align: center; color: #0B3D91; }
         h3 { border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 0; color: #0B3D91; }
@@ -25,7 +31,6 @@
         .checkbox-label { display: flex; align-items: center; font-weight: normal; margin-top: 25px; cursor: pointer; }
         .checkbox-label input { width: auto; margin-right: 10px; cursor: pointer; }
         
-        /* 預覽區塊樣式 */
         .preview-container { background: #eef2f5; padding: 15px; border-radius: 8px; text-align: center; margin-top: 15px; }
         #previewCanvas { max-width: 100%; max-height: 400px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background: white; }
     </style>
@@ -94,7 +99,7 @@
             fg: document.getElementById("fgColor").value || "#FFFFFF",
             fontPx: parseInt(document.getElementById("fontPx").value) || 250,
             gapPx: parseInt(document.getElementById("gapPx").value) || 100,
-            foreignFirst: document.getElementById("foreignFirst").checked // 取得勾選狀態
+            foreignFirst: document.getElementById("foreignFirst").checked
         };
     }
 
@@ -110,49 +115,28 @@
         updatePreview();
     }
 
-    // 載入自訂字體
-    let fontLoaded = false;
-    async function loadFont() {
-        if(fontLoaded) return true;
-        try {
-            const font = new FontFace('CustomFont', 'url(NotoSansCJKtc-Regular.ttf)');
-            await font.load();
-            document.fonts.add(font);
-            fontLoaded = true;
-            updatePreview();
-            return true;
-        } catch (e) {
-            console.warn("字體載入失敗，將使用系統預設字體");
-            return false;
-        }
-    }
-
-    // 核心繪圖邏輯：自動將兩列文字在畫布正中央置中，並處理上下順序
+    // 核心繪圖邏輯：自動使用 Noto Sans TC
     function renderBadgeOnCanvas(canvas, en, zh, cfg) {
         canvas.width = cfg.height;
         canvas.height = cfg.width;
         
         const ctx = canvas.getContext('2d');
         
-        // 旋轉畫布
         ctx.translate(0, cfg.width);
         ctx.rotate(-Math.PI / 2);
 
-        // 填滿背景色
         ctx.fillStyle = cfg.bg;
         ctx.fillRect(0, 0, cfg.width, cfg.height);
 
-        // 設定字體與對齊方式 (textAlign = 'center' 自動水平置中)
+        // 強制指定使用 Google Fonts 載入的 'Noto Sans TC'
         ctx.fillStyle = cfg.fg;
         ctx.textAlign = 'center';
-        const fontName = fontLoaded ? '"CustomFont", sans-serif' : 'sans-serif';
-        ctx.font = `${cfg.fontPx}px ${fontName}`;
+        ctx.font = `bold ${cfg.fontPx}px 'Noto Sans TC', sans-serif`;
 
         const centerX = cfg.width / 2;
         const centerY = cfg.height / 2;
 
         if (en && zh) {
-            // 根據勾選狀態決定誰在上面
             const topText = cfg.foreignFirst ? en : zh;
             const bottomText = cfg.foreignFirst ? zh : en;
 
@@ -162,7 +146,6 @@
             ctx.textBaseline = 'top';
             ctx.fillText(bottomText, centerX, centerY + (cfg.gapPx / 2));
         } else if (en || zh) {
-            // 如果只有其中一個名字：直接在畫面正中央垂直置中
             const text = en || zh;
             ctx.textBaseline = 'middle';
             ctx.fillText(text, centerX, centerY);
@@ -215,11 +198,10 @@
                 let validCount = 0;
 
                 json.forEach((row, index) => {
-                    // 自動判斷常見的欄位名稱
                     const en = (row['Kor.'] || row['Eng.'] || row['外文姓名'] || row['外文'] || "").toString().trim();
                     const zh = (row['Chn.'] || row['中文姓名'] || row['中文'] || "").toString().trim();
                     
-                    if (!en && !zh) return; // 跳過空行
+                    if (!en && !zh) return; 
                     
                     validCount++;
                     const fileName = `${zh || en}_${validCount.toString().padStart(3, '0')}.png`;
@@ -259,10 +241,12 @@
         reader.readAsArrayBuffer(file);
     }
 
-    // 頁面載入時初始化
+    // 頁面載入時初始化，確保雲端字體載入完成後再畫預覽圖
     window.onload = () => {
         applyPreset();
-        loadFont();
+        document.fonts.ready.then(() => {
+            updatePreview();
+        });
     };
 </script>
 </body>
