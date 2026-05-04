@@ -31,15 +31,13 @@
         .checkbox-label input { width: auto; margin-right: 10px; cursor: pointer; }
         
         .preview-container { background: #eef2f5; padding: 15px; border-radius: 8px; text-align: center; margin-top: 15px; }
-        /* 預覽圖改為橫向，設定最大寬度確保手機不破版 */
         #previewCanvas { max-width: 100%; max-height: auto; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background: white; }
     </style>
 </head>
 <body>
 
     <h1>🪪 雙語名牌產生器</h1>
-
-    <div class="card">
+    <div id="status"></div> <div class="card">
         <h3>⚙️ 名牌樣式設定</h3>
         <div class="grid">
             <div>
@@ -51,7 +49,7 @@
             </div>
             <div>
                 <label>選擇字體</label>
-                <select id="fontSelect" onchange="updatePreview()">
+                <select id="fontSelect" onchange="handleFontChange()">
                     <option value="'Noto Sans TC'">思源黑體 (標準)</option>
                     <option value="'Noto Serif TC'">思源宋體 (典雅)</option>
                     <option value="'LXGW WenKai TC'">霞鶩文楷 (雲端楷體)</option>
@@ -91,7 +89,6 @@
         <h3>📂 批次產生 (Excel上傳)</h3>
         <input type="file" id="excelFile" accept=".xlsx, .xls" style="margin-bottom: 10px;">
         <button id="generateBtn" onclick="generateBatchBadges()">🚀 批次產生並下載 ZIP</button>
-        <div id="status"></div>
     </div>
 
 <script>
@@ -113,7 +110,7 @@
         };
     }
 
-    function applyPreset() {
+    async function applyPreset() {
         const val = document.getElementById("presetSelect").value;
         const p = presets[val];
         document.getElementById("imgW").value = p.w;
@@ -122,22 +119,18 @@
         document.getElementById("fgColor").value = p.fg;
         document.getElementById("fontPx").value = p.font;
         document.getElementById("gapPx").value = p.gap;
-        updatePreview();
+        await updatePreview();
     }
 
-    // 將繪圖邏輯改為「純橫向」，不進行任何旋轉
     function renderBadgeOnCanvas(canvas, en, zh, cfg) {
-        // 設定為橫向寬高
         canvas.width = cfg.width;
         canvas.height = cfg.height;
         
         const ctx = canvas.getContext('2d');
 
-        // 填滿背景
         ctx.fillStyle = cfg.bg;
         ctx.fillRect(0, 0, cfg.width, cfg.height);
 
-        // 設定字體與置中對齊
         ctx.fillStyle = cfg.fg;
         ctx.textAlign = 'center';
         ctx.font = `${cfg.fontPx}px ${cfg.fontFamily}, sans-serif`;
@@ -161,36 +154,55 @@
         }
     }
 
-    // 新增：旋轉工具，負責將橫向畫布轉 270 度 (-90度)
     function getRotatedCanvas(sourceCanvas) {
         const rotatedCanvas = document.createElement('canvas');
-        // 旋轉後，寬高互換
         rotatedCanvas.width = sourceCanvas.height;
         rotatedCanvas.height = sourceCanvas.width;
         
         const ctx = rotatedCanvas.getContext('2d');
-        // 移到左下角，再轉 -90 度 (相當於轉 270 度)
         ctx.translate(0, sourceCanvas.width);
         ctx.rotate(-Math.PI / 2);
         
-        // 將原本的橫向畫面畫上去
         ctx.drawImage(sourceCanvas, 0, 0);
         return rotatedCanvas;
     }
 
-    // 預覽功能：只畫橫的，直接顯示
-    function updatePreview() {
+    // 專門處理下拉選單切換字體時的提示
+    async function handleFontChange() {
+        const statusEl = document.getElementById('status');
+        statusEl.innerText = "⏳ 正在下載新字體，請稍候 (初次切換約需幾秒鐘)...";
+        statusEl.style.color = "#0B3D91";
+        
+        await updatePreview();
+        
+        statusEl.innerText = "✅ 字體切換成功！";
+        statusEl.style.color = "#4CAF50";
+        setTimeout(() => { 
+            if(statusEl.innerText.includes("切換成功")) statusEl.innerText = ""; 
+        }, 2000);
+    }
+
+    // 將 updatePreview 改成非同步 (async)，確保字體準備好才畫圖
+    async function updatePreview() {
         const canvas = document.getElementById("previewCanvas");
         const cfg = getConfig();
         const en = document.getElementById("s_en").value.trim();
         const zh = document.getElementById("s_zh").value.trim();
+        
+        // 【關鍵修復】: 強迫畫布等待字體從 Google 下載到記憶體後，才開始畫圖！
+        const textToLoad = (en + zh) || "中英測試文字";
+        try {
+            await document.fonts.load(`${cfg.fontPx}px ${cfg.fontFamily}`, textToLoad);
+        } catch(e) {
+            console.log("字體載入中...");
+        }
+
         renderBadgeOnCanvas(canvas, en, zh, cfg);
     }
 
-    // 下載單張功能：將預覽畫布旋轉後才下載
     function downloadSingleBadge() {
         const sourceCanvas = document.getElementById("previewCanvas");
-        const finalCanvas = getRotatedCanvas(sourceCanvas); // 輸出前旋轉
+        const finalCanvas = getRotatedCanvas(sourceCanvas); 
         
         const en = document.getElementById("s_en").value.trim();
         const zh = document.getElementById("s_zh").value.trim();
@@ -199,12 +211,12 @@
         finalCanvas.toBlob(blob => saveAs(blob, fileName), "image/png");
     }
 
-    // 批次產生功能：將每一張旋轉後塞進 ZIP
     async function generateBatchBadges() {
         const fileInput = document.getElementById('excelFile');
         if (!fileInput.files.length) { alert("請先上傳 Excel！"); return; }
 
         document.getElementById('status').innerText = "處理資料中...";
+        document.getElementById('status').style.color = "#0B3D91";
         document.getElementById('generateBtn').disabled = true;
 
         const reader = new FileReader();
@@ -215,6 +227,10 @@
                 const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {defval: ""});
 
                 const cfg = getConfig();
+                
+                // 批次產生前，先確保字體已經載入
+                await document.fonts.load(`${cfg.fontPx}px ${cfg.fontFamily}`);
+
                 const zip = new JSZip();
                 const promises = [];
                 let validCount = 0;
@@ -226,14 +242,11 @@
                     
                     validCount++;
                     
-                    // 1. 先畫出橫的
                     const tempCanvas = document.createElement('canvas');
                     renderBadgeOnCanvas(tempCanvas, en, zh, cfg);
                     
-                    // 2. 將橫的旋轉成直的
                     const finalCanvas = getRotatedCanvas(tempCanvas);
                     
-                    // 3. 把旋轉後的塞進壓縮檔
                     promises.push(new Promise(res => finalCanvas.toBlob(b => {
                         zip.file(`${zh || en}_${validCount.toString().padStart(3, '0')}.png`, b);
                         res();
@@ -243,9 +256,11 @@
                 await Promise.all(promises);
                 const content = await zip.generateAsync({type:"blob"});
                 saveAs(content, "badges.zip");
-                document.getElementById('status').innerText = "✅ 完成！";
+                document.getElementById('status').innerText = `✅ 成功產生 ${validCount} 張！已下載 ZIP。`;
+                document.getElementById('status').style.color = "#4CAF50";
             } catch (err) {
                 document.getElementById('status').innerText = "錯誤：" + err.message;
+                document.getElementById('status').style.color = "#d9534f";
             } finally {
                 document.getElementById('generateBtn').disabled = false;
             }
@@ -253,9 +268,11 @@
         reader.readAsArrayBuffer(fileInput.files[0]);
     }
 
-    window.onload = () => {
+    window.onload = async () => {
         applyPreset();
-        document.fonts.ready.then(() => updatePreview());
+        // 確保剛開網頁時的字體也有被正確載入並畫出
+        await document.fonts.ready;
+        updatePreview();
     };
 </script>
 </body>
