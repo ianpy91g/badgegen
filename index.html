@@ -31,7 +31,8 @@
         .checkbox-label input { width: auto; margin-right: 10px; cursor: pointer; }
         
         .preview-container { background: #eef2f5; padding: 15px; border-radius: 8px; text-align: center; margin-top: 15px; }
-        #previewCanvas { max-width: 100%; max-height: 400px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background: white; }
+        /* 預覽圖改為橫向，設定最大寬度確保手機不破版 */
+        #previewCanvas { max-width: 100%; max-height: auto; box-shadow: 0 4px 8px rgba(0,0,0,0.2); background: white; }
     </style>
 </head>
 <body>
@@ -80,7 +81,7 @@
         </div>
         
         <div class="preview-container">
-            <p style="margin-top:0; color:#555; font-size:0.9em;">即時預覽 (產生時將自動旋轉 270 度)</p>
+            <p style="margin-top:0; color:#555; font-size:0.9em;">即時預覽 (橫向方便閱讀，下載時將自動旋轉 270 度)</p>
             <canvas id="previewCanvas"></canvas>
         </div>
         <button class="btn-secondary" onclick="downloadSingleBadge()">📥 下載此單張名牌</button>
@@ -124,17 +125,19 @@
         updatePreview();
     }
 
+    // 將繪圖邏輯改為「純橫向」，不進行任何旋轉
     function renderBadgeOnCanvas(canvas, en, zh, cfg) {
-        canvas.width = cfg.height;
-        canvas.height = cfg.width;
+        // 設定為橫向寬高
+        canvas.width = cfg.width;
+        canvas.height = cfg.height;
         
         const ctx = canvas.getContext('2d');
-        ctx.translate(0, cfg.width);
-        ctx.rotate(-Math.PI / 2);
 
+        // 填滿背景
         ctx.fillStyle = cfg.bg;
         ctx.fillRect(0, 0, cfg.width, cfg.height);
 
+        // 設定字體與置中對齊
         ctx.fillStyle = cfg.fg;
         ctx.textAlign = 'center';
         ctx.font = `${cfg.fontPx}px ${cfg.fontFamily}, sans-serif`;
@@ -158,6 +161,24 @@
         }
     }
 
+    // 新增：旋轉工具，負責將橫向畫布轉 270 度 (-90度)
+    function getRotatedCanvas(sourceCanvas) {
+        const rotatedCanvas = document.createElement('canvas');
+        // 旋轉後，寬高互換
+        rotatedCanvas.width = sourceCanvas.height;
+        rotatedCanvas.height = sourceCanvas.width;
+        
+        const ctx = rotatedCanvas.getContext('2d');
+        // 移到左下角，再轉 -90 度 (相當於轉 270 度)
+        ctx.translate(0, sourceCanvas.width);
+        ctx.rotate(-Math.PI / 2);
+        
+        // 將原本的橫向畫面畫上去
+        ctx.drawImage(sourceCanvas, 0, 0);
+        return rotatedCanvas;
+    }
+
+    // 預覽功能：只畫橫的，直接顯示
     function updatePreview() {
         const canvas = document.getElementById("previewCanvas");
         const cfg = getConfig();
@@ -166,14 +187,19 @@
         renderBadgeOnCanvas(canvas, en, zh, cfg);
     }
 
+    // 下載單張功能：將預覽畫布旋轉後才下載
     function downloadSingleBadge() {
-        const canvas = document.getElementById("previewCanvas");
+        const sourceCanvas = document.getElementById("previewCanvas");
+        const finalCanvas = getRotatedCanvas(sourceCanvas); // 輸出前旋轉
+        
         const en = document.getElementById("s_en").value.trim();
         const zh = document.getElementById("s_zh").value.trim();
         const fileName = `${zh || en || '名牌'}.png`;
-        canvas.toBlob(blob => saveAs(blob, fileName), "image/png");
+        
+        finalCanvas.toBlob(blob => saveAs(blob, fileName), "image/png");
     }
 
+    // 批次產生功能：將每一張旋轉後塞進 ZIP
     async function generateBatchBadges() {
         const fileInput = document.getElementById('excelFile');
         if (!fileInput.files.length) { alert("請先上傳 Excel！"); return; }
@@ -199,9 +225,16 @@
                     if (!en && !zh) return;
                     
                     validCount++;
+                    
+                    // 1. 先畫出橫的
                     const tempCanvas = document.createElement('canvas');
                     renderBadgeOnCanvas(tempCanvas, en, zh, cfg);
-                    promises.push(new Promise(res => tempCanvas.toBlob(b => {
+                    
+                    // 2. 將橫的旋轉成直的
+                    const finalCanvas = getRotatedCanvas(tempCanvas);
+                    
+                    // 3. 把旋轉後的塞進壓縮檔
+                    promises.push(new Promise(res => finalCanvas.toBlob(b => {
                         zip.file(`${zh || en}_${validCount.toString().padStart(3, '0')}.png`, b);
                         res();
                     }, 'image/png')));
