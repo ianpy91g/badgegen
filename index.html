@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>名牌產生器 Web 版</title>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f7fa; color: #333; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h1 { text-align: center; color: #0B3D91; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.9em; }
+        input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input[type="color"] { padding: 2px; height: 35px; }
+        button { background: #0B3D91; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; }
+        button:hover { background: #082d6b; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        #status { margin-top: 15px; text-align: center; font-weight: bold; color: #d9534f; }
+        .checkbox-label { display: flex; align-items: center; font-weight: normal; }
+        .checkbox-label input { width: auto; margin-right: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>🪪 名牌產生器 Web 版</h1>
+
+    <div class="card">
+        <label>📂 請上傳 Excel 檔案 (.xlsx)</label>
+        <input type="file" id="excelFile" accept=".xlsx, .xls">
+    </div>
+
+    <div class="card">
+        <h3>⚙️ 設定</h3>
+        <div class="grid">
+            <div>
+                <label>預設樣式</label>
+                <select id="presetSelect" onchange="applyPreset()">
+                    <option value="手機藍白">手機藍白</option>
+                    <option value="A4黑白">A4黑白</option>
+                </select>
+            </div>
+            <div>
+                <label class="checkbox-label" style="margin-top: 25px;">
+                    <input type="checkbox" id="showLines" checked> 顯示列分隔線
+                </label>
+            </div>
+            <div>
+                <label>寬度 (W)</label>
+                <input type="number" id="imgW">
+            </div>
+            <div>
+                <label>高度 (H)</label>
+                <input type="number" id="imgH">
+            </div>
+            <div>
+                <label>背景顏色</label>
+                <input type="color" id="bgColor">
+            </div>
+            <div>
+                <label>字體顏色</label>
+                <input type="color" id="fgColor">
+            </div>
+            <div>
+                <label>主要字體大小 (px)</label>
+                <input type="number" id="mainFontPx">
+            </div>
+            <div>
+                <label>右下字體大小 (px)</label>
+                <input type="number" id="footerFontPx">
+            </div>
+            <div>
+                <label>文字間距 (px)</label>
+                <input type="number" id="gapPx">
+            </div>
+        </div>
+    </div>
+
+    <button id="generateBtn" onclick="generateBadges()">🚀 開始產生名牌 (下載 ZIP)</button>
+    <div id="status"></div>
+
+<script>
+    // 預設樣式
+    const presets = {
+        "手機藍白": { w: 1920, h: 1080, bg: "#0B3D91", fg: "#FFFFFF", mainFn: 200, footFn: 90, gap: 40 },
+        "A4黑白": { w: 3508, h: 2480, bg: "#FFFFFF", fg: "#000000", mainFn: 320, footFn: 120, gap: 60 }
+    };
+
+    function applyPreset() {
+        const val = document.getElementById("presetSelect").value;
+        const p = presets[val];
+        document.getElementById("imgW").value = p.w;
+        document.getElementById("imgH").value = p.h;
+        document.getElementById("bgColor").value = p.bg;
+        document.getElementById("fgColor").value = p.fg;
+        document.getElementById("mainFontPx").value = p.mainFn;
+        document.getElementById("footerFontPx").value = p.footFn;
+        document.getElementById("gapPx").value = p.gap;
+    }
+
+    // 初始化套用設定
+    applyPreset();
+
+    // 載入自訂字體
+    let fontLoaded = false;
+    async function loadFont() {
+        if(fontLoaded) return true;
+        try {
+            // 請確保字體檔案跟 HTML 放在同一個目錄
+            const font = new FontFace('CustomFont', 'url(NotoSansCJKtc-Regular.ttf)');
+            await font.load();
+            document.fonts.add(font);
+            fontLoaded = true;
+            return true;
+        } catch (e) {
+            alert("載入字體 (NotoSansCJKtc-Regular.ttf) 失敗，請確保字體檔案存在同目錄下。");
+            return false;
+        }
+    }
+
+    async function generateBadges() {
+        const fileInput = document.getElementById('excelFile');
+        if (!fileInput.files.length) {
+            alert("請先上傳 Excel 檔案！");
+            return;
+        }
+
+        document.getElementById('status').innerText = "載入字體與處理資料中...";
+        document.getElementById('generateBtn').disabled = true;
+
+        const isFontReady = await loadFont();
+        if(!isFontReady) {
+            document.getElementById('generateBtn').disabled = false;
+            document.getElementById('status').innerText = "";
+            return;
+        }
+
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+
+        reader.onload = async function(e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                let json = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
+
+                // 資料預處理 (ffill for Group)
+                let currentGroup = "";
+                json.forEach(row => {
+                    if (row['Group'] !== undefined && row['Group'] !== "") currentGroup = row['Group'];
+                    else row['Group'] = currentGroup;
+                });
+
+                // 根據 Group 分組
+                const grouped = {};
+                json.forEach(row => {
+                    const g = row['Group'];
+                    if(!g) return;
+                    if(!grouped[g]) grouped[g] = [];
+                    grouped[g].push(row);
+                });
+
+                // 準備繪圖參數
+                const config = {
+                    width: parseInt(document.getElementById("imgW").value),
+                    height: parseInt(document.getElementById("imgH").value),
+                    bg: document.getElementById("bgColor").value,
+                    fg: document.getElementById("fgColor").value,
+                    mainFontPx: parseInt(document.getElementById("mainFontPx").value),
+                    footerFontPx: parseInt(document.getElementById("footerFontPx").value),
+                    gapPx: parseInt(document.getElementById("gapPx").value),
+                    showLines: document.getElementById("showLines").checked
+                };
+
+                const zip = new JSZip();
+                const promises = [];
+
+                Object.keys(grouped).forEach(groupKey => {
+                    const rows = grouped[groupKey];
+                    let groupStr = parseInt(groupKey);
+                    groupStr = isNaN(groupStr) ? groupKey : groupStr.toString().padStart(2, '0');
+                    const fileName = `Arrangement_${groupStr}.png`;
+                    
+                    promises.push(drawAndGetBlob(rows, config).then(blob => {
+                        zip.file(fileName, blob);
+                    }));
+                });
+
+                document.getElementById('status').innerText = `正在產生 ${Object.keys(grouped).length} 張名牌...`;
+                
+                await Promise.all(promises);
+
+                document.getElementById('status').innerText = "打包壓縮中...";
+                const content = await zip.generateAsync({type:"blob"});
+                saveAs(content, "badges.zip");
+
+                document.getElementById('status').innerText = "✅ 產生完成！已觸發下載。";
+                document.getElementById('status').style.color = "#4CAF50";
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById('status').innerText = "發生錯誤：" + err.message;
+            } finally {
+                document.getElementById('generateBtn').disabled = false;
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    // 核心繪圖邏輯 (HTML5 Canvas)
+    function drawAndGetBlob(rows, cfg) {
+        return new Promise(resolve => {
+            const canvas = document.createElement('canvas');
+            // 因為最後要轉 270 度，所以初始化畫布時長寬互換
+            canvas.width = cfg.height;
+            canvas.height = cfg.width;
+            
+            const ctx = canvas.getContext('2d');
+            
+            // 處理旋轉 270 度 (-90度)
+            ctx.translate(0, cfg.width);
+            ctx.rotate(-Math.PI / 2);
+
+            // 畫背景 (此時的座標系是正常的 cfg.width x cfg.height)
+            ctx.fillStyle = cfg.bg;
+            ctx.fillRect(0, 0, cfg.width, cfg.height);
+
+            const topSafe = cfg.height * 0.04;
+            const bottomSafe = cfg.height * 0.04;
+            const leftPad = cfg.width * 0.025;
+            const rightPad = cfg.width * 0.025;
+            const footerReserve = Math.max(cfg.footerFontPx * 2.2, cfg.height * 0.06);
+
+            const n = rows.length;
+            const contentTop = topSafe;
+            const contentBottom = cfg.height - bottomSafe - footerReserve;
+            const lineH = Math.max(1, contentBottom - contentTop) / Math.max(1, n);
+
+            ctx.fillStyle = cfg.fg;
+            ctx.strokeStyle = cfg.fg;
+            ctx.lineWidth = 2;
+            ctx.textBaseline = 'middle';
+
+            // 處理每一列資料
+            rows.forEach((r, i) => {
+                const yTop = contentTop + i * lineH;
+                if (cfg.showLines && i > 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(leftPad, yTop);
+                    ctx.lineTo(cfg.width - rightPad, yTop);
+                    ctx.stroke();
+                }
+
+                const team = (r['Team'] || "").toString().trim();
+                let no = r['No'];
+                if(no !== undefined && no !== "") {
+                    no = !isNaN(parseFloat(no)) ? parseInt(no).toString() : no.toString().trim();
+                } else { no = ""; }
+
+                const en = (r['Kor.'] || "").toString().trim();
+                const zh = (r['Chn.'] || "").toString().trim();
+                const gno = `${team}${no}`;
+
+                ctx.font = `${cfg.mainFontPx}px "CustomFont", sans-serif`;
+                
+                const parts = [];
+                if(gno) parts.push(gno);
+                if(en) parts.push(en);
+                if(zh) parts.push(zh);
+
+                if(parts.length > 0) {
+                    const totalW = parts.reduce((sum, t) => sum + ctx.measureText(t).width, 0) + cfg.gapPx * (parts.length - 1);
+                    let currX = (cfg.width - totalW) / 2;
+                    const yMid = yTop + (lineH / 2);
+
+                    parts.forEach(t => {
+                        ctx.fillText(t, currX, yMid);
+                        currX += ctx.measureText(t).width + cfg.gapPx;
+                    });
+                }
+            });
+
+            // 處理右下角文字
+            const firstRow = rows[0];
+            const hostGroup = (firstRow['接待大組'] || "").toString().trim();
+            const hostFamily = (firstRow['接待家'] || "").toString().trim();
+            let footer = [];
+            if(hostGroup) footer.push(hostGroup);
+            if(hostFamily) footer.push(hostFamily);
+            footer = footer.join("/");
+
+            if (footer) {
+                ctx.font = `${cfg.footerFontPx}px "CustomFont", sans-serif`;
+                ctx.textBaseline = 'bottom';
+                const fw = ctx.measureText(footer).width;
+                ctx.fillText(footer, cfg.width - rightPad - fw, cfg.height - bottomSafe);
+            }
+
+            canvas.toBlob(blob => {
+                resolve(blob);
+            }, 'image/png');
+        });
+    }
+</script>
+</body>
+</html>
